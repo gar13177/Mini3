@@ -28,7 +28,7 @@ td = maxint#maximo entero posible
 T = 60#tiempo limite
 A = []
 D = []
-cont = 0
+
 while t <= T or n > 0:
     if ta <= td and ta <=T:
         t = ta
@@ -36,7 +36,6 @@ while t <= T or n > 0:
         n += 1
         ta = ProcPoi(t)
         if n == 1:
-            cont += 1
             #--------ERROR
             td = t + Exponencial(1)#cambiar por tiempo de servicio
             #----------
