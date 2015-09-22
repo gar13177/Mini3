@@ -6,11 +6,11 @@ Created on Sat Sep 19 14:30:14 2015
 """
 
 from random import random
-from math import log, exp
+from math import log
 from sys import maxint
 
 def Exponencial(lam):
-    return -(1/lam)*log(random(),exp(1))
+    return -(1.0/lam)*log(random())
 
 #generador de tiempos de ocurrencia
 def ProcPoi (s):
@@ -25,44 +25,75 @@ def FirstOccurrence(vector, val):
             return i
     return -1
     
+def Active( A, D):
+    #A es tiempo de llegada
+    #D es tiempo de salida
+    result = min(A)#se mantiene inactivo hasta la primera llegada
+    for i in range(1,len(A)):
+        if A[i]>D[i-1]:#paso un tiempo inactivo
+            result += A[i]-D[i-1]
+    result = max(D)-result#tiempo activo es el ultimo momento de trabajo menos inactivo    
+    return result
+    
+def EnCola( A, D):
+    #A es tiempo de llegada
+    #D es tiempo de salida
+    result = 0#no se mantuvo en cola
+    total = 0#cantidad
+    for i in range(1,len(A)):
+        if A[i]<D[i-1]:#como es menor el de llegada, estuvo en cola
+            result += D[i-1]-A[i]#tiempo en cola: tiempo atendido-tiempo llegada
+            total += 1
+    return result,total
+    
 
 #inicializacion
-server = 1
+#HOST 1
+lam = 100
+server = 3
+
+#HOST 2
+#lam = 10
+#server = 1
+
+lamPoi = 40
+
+
 serversA = []#hora de atencion
 serversD = []#hora de salida
 for i in range(server):
-    serversA.append([])#servers cola
-    serversD.append([])
+    serversA.append([])#cada server tiene su propia cola
+    serversD.append([])#cada server tiene su propia cola
     
 t = 0
 Na = 0
 Nd = 0
 n = 0
-ta = ProcPoi(0)#primer tiempo de llegada
+ta = Exponencial(lamPoi)#primer tiempo de llegada
 td = [maxint]*server#vector td con cantidad de servidores
 tdindex = [0]*server#vector con indices
 #td = maxint#maximo entero posible
-T = 60#tiempo limite
+
+T = 3600#tiempo limite
+
 A = []#inicio atencion
 D = []#final atencion
 constante = 0
 while t <= T or n > 0:
-    #print "ta:"+str(ta)+" td:"+str(td)+" t:"+str(t)+" n:"+str(n)
-    #raw_input("Inicio")
+    
     if ta <= min(td) and ta <=T:
         #ingreso es menor que el menor de los servidores
         t = ta
         Na += 1
         n += 1
-        ta = ProcPoi(t)#nuevo tiempo de llegada
+        ta = t + Exponencial(lamPoi)#nuevo tiempo de llegada
         
         #servidore(s) estaban vacios y ahora hay uno nuevo
         if FirstOccurrence(td,maxint) != -1:
-            #primer servidor atiende uno nuevo
+            #servidor libre atiende inmediatamente
             tempindex = FirstOccurrence(td,maxint)
-            td[tempindex] = t + Exponencial(1)
+            td[tempindex] = t + Exponencial(lam)
             tdindex[tempindex] = Na#se guarda el numero de cliente
-            #n += -1#ya se quito de la cola
             
         A.append(t)
         D.append(0.0)#se crea espacio para el siguiente
@@ -73,13 +104,17 @@ while t <= T or n > 0:
         Nd += 1
         
         tempindex = FirstOccurrence(td,min(td))
-        D[tdindex[tempindex]-1] = t
+        D[tdindex[tempindex]-1] = t#como ya ingreso, se guarda la hora de salida
+        
+        #tdindex guarda el numero de cliente
+        serversA[tempindex].append(A[tdindex[tempindex]-1])
+        serversD[tempindex].append(D[tdindex[tempindex]-1])        
         
         if n <= len(td):#se queda vacio 
             td[tempindex] = maxint
         else:
             #aun hay en cola, entonces nuevo tiempo
-            td[tempindex] = t + Exponencial(1)
+            td[tempindex] = t + Exponencial(lam)
             tdindex[tempindex] = max(tdindex)+1
         
         n += -1
@@ -92,17 +127,21 @@ while t <= T or n > 0:
         tempindex = FirstOccurrence(td,min(td))
         D[tdindex[tempindex]-1] = t
         
+        #tdindex guarda el numero de cliente
+        serversA[tempindex].append(A[tdindex[tempindex]-1])
+        serversD[tempindex].append(D[tdindex[tempindex]-1]) 
+        
         if n <= len(td):#se queda vacio 
             td[tempindex] = maxint
         else:
             #aun hay en cola, entonces nuevo tiempo
-            td[tempindex] = t + Exponencial(1)
+            td[tempindex] = t + Exponencial(lam)
             tdindex[tempindex] = max(tdindex)+1
         n += -1  
         
     elif min(ta,min(td)) > T and n == 0:
-        break
-        #n=0
+        break#no tiene sentido continuar
+
     #print "td:"+str(min(td))+" ta:"+str(ta)+" n:"+str(n)+" t:"+str(t)
   
 Tp = max(t - T, 0)#tiempo activo del servidor despues de cierre
@@ -110,12 +149,30 @@ Tp = max(t - T, 0)#tiempo activo del servidor despues de cierre
 if Tp == 0:
     print max(D)
 
-inactivo = 0#tiempo que no atendio solicitudes
-for i in range(1, min(len(A),len(D))):
-    if A[i]>D[i-1]:#si el tiempo de llegada es mayor que la ultima salida
-        inactivo += A[i]-D[i-1]
 
-activo = D[len(D)-1]-inactivo#tiempo que atendio solicitudes
+#estadisticas por servidor
+serversStats = []#estadisticas de todos los servidores
+for k in range(len(serversA)):
+    #i guarda el indice del servidor
+    stats = []
+    stats.append(len(serversA[k]))#cantidad atendida
+    if stats[0]!=0:
+        stats.append(Active(serversA[k], serversD[k]))#tiempo activo
+        stats.append(max(max(serversD[k]),T)-stats[-1])#tiempo inactivo = ultimo tiempo-tiempo activo
+        t1,t2 = EnCola(serversA[k], serversD[k])
+        stats.append(t1)#tiempo que hicieron cola
+        stats.append(t2)#cantidad que hizo cola
+        stats.append(float(stats[-4])/len(serversA[k]))#tiempo promedio
+        stats.append(max(max(serversD[k])-T,0))#tiempo activo despues de cierre
+    else:
+        stats.append(0)
+        stats.append(0)
+        stats.append(0)
+        stats.append(0)
+        stats.append(0)
+        stats.append(0)
+    
+    serversStats.append(stats)
         
 promedio = sum(D[i]-A[i] for i in range(len(A)))/len(A)#promedio de atencion (t)
 
